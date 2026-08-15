@@ -1,160 +1,98 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
-/* ======================================================
-   EMAIL TRANSPORTER
-====================================================== */
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-const transporter = nodemailer.createTransport({
-  service: "gmail",
+const sendInviteEmail = async (doctorEmail, inviteToken) => {
+  const frontendUrl =
+    process.env.FRONTEND_URL || "http://localhost:3000";
 
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+  const setupUrl = `${frontendUrl}/doctor-setup/${inviteToken}`;
 
-/* ======================================================
-   VERIFY CONNECTION
-====================================================== */
+  const { data, error } = await resend.emails.send({
+    from: "ClinicFlow <onboarding@resend.dev>",
+    to: [doctorEmail],
+    subject: "ClinicFlow - Complete Your Doctor Account Setup",
 
-transporter.verify((error) => {
+    html: `
+      <div style="
+        font-family: Arial, sans-serif;
+        max-width: 600px;
+        margin: auto;
+        padding: 30px;
+        line-height: 1.6;
+      ">
 
-  if (error) {
+        <h2 style="color: #2563eb;">
+          Welcome to ClinicFlow
+        </h2>
 
-    console.error(
-      "Email transporter error:",
-      error
-    );
+        <p>Hello Doctor,</p>
 
-  } else {
+        <p>
+          Your doctor account has been created by the
+          ClinicFlow administrator.
+        </p>
 
-    console.log(
-      "✅ Email server connected"
-    );
+        <p>
+          Please click the button below to create your password
+          and complete your account setup.
+        </p>
 
-  }
-
-});
-
-
-/* ======================================================
-   SEND INVITE EMAIL
-====================================================== */
-
-const sendInviteEmail = async (
-  email,
-  inviteToken
-) => {
-
-  try {
-
-    /* ================= VALIDATION ================= */
-
-    if (!email || !inviteToken) {
-      throw new Error(
-        "Email and invite token required"
-      );
-    }
-
-    /* ================= FRONTEND URL ================= */
-
-    if (!process.env.FRONTEND_URL) {
-      throw new Error(
-        "FRONTEND_URL missing in environment variables"
-      );
-    }
-
-    /* ================= INVITE LINK ================= */
-
-    const inviteLink =
-      `${process.env.FRONTEND_URL}/doctor-setup/${inviteToken}`;
-
-    /* ================= EMAIL TEMPLATE ================= */
-
-    const mailOptions = {
-
-      from: `"ClinicFlow" <${process.env.EMAIL_USER}>`,
-
-      to: email,
-
-      subject:
-        "Doctor Account Setup - ClinicFlow",
-
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-
-          <h2 style="color:#2563eb;">
-            Welcome to ClinicFlow
-          </h2>
-
-          <p>
-            Your doctor account has been created successfully.
-          </p>
-
-          <p>
-            Click the button below to setup your password:
-          </p>
-
+        <div style="margin: 30px 0;">
           <a
-            href="${inviteLink}"
+            href="${setupUrl}"
             style="
-              display:inline-block;
-              padding:12px 20px;
-              background:#2563eb;
-              color:white;
-              text-decoration:none;
-              border-radius:6px;
-              margin-top:10px;
+              display: inline-block;
+              padding: 12px 24px;
+              background-color: #2563eb;
+              color: #ffffff;
+              text-decoration: none;
+              border-radius: 6px;
+              font-weight: bold;
             "
           >
-            Setup Password
+            Complete Account Setup
           </a>
-
-          <p style="margin-top:20px;">
-            Or copy this link:
-          </p>
-
-          <p>
-            ${inviteLink}
-          </p>
-
-          <p style="margin-top:20px; color:gray;">
-            This link will expire in 24 hours.
-          </p>
-
         </div>
-      `
 
-    };
+        <p>
+          If the button doesn't work, copy and paste this URL
+          into your browser:
+        </p>
 
-    /* ================= SEND EMAIL ================= */
+        <p>
+          <a href="${setupUrl}">
+            ${setupUrl}
+          </a>
+        </p>
 
-    const info =
-      await transporter.sendMail(
-        mailOptions
-      );
+        <p>
+          This invitation link is valid for 24 hours.
+        </p>
 
-    console.log(
-      "✅ Invite email sent:",
-      info.messageId
-    );
+        <hr style="margin: 30px 0;" />
 
-    return {
-      success: true,
-      messageId: info.messageId
-    };
+        <p style="color: #666; font-size: 13px;">
+          This is an automated email from ClinicFlow.
+          Please do not reply to this email.
+        </p>
 
-  } catch (error) {
+        <p style="color: #666; font-size: 13px;">
+          © ClinicFlow
+        </p>
 
-    console.error(
-      "❌ Invite email error:",
-      error.message
-    );
+      </div>
+    `
+  });
 
-    throw error;
-
+  if (error) {
+    console.error("❌ Resend email failed:", error);
+    throw new Error(error.message);
   }
 
+  console.log("✅ Email sent successfully:", data?.id);
+
+  return data;
 };
 
 module.exports = sendInviteEmail;
