@@ -14,7 +14,7 @@ const app = express();
 /* ======================================================
    DATABASE
 ====================================================== */
-
+console.log(process.env.MONGO_URI);
 const startServer = async () => {
 
   try {
