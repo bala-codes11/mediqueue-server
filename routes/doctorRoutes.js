@@ -255,7 +255,66 @@ router.post(
   }
 );
 
+/* ======================================================
+   GET DOCTOR'S OWN SLOTS
+   Used by Doctor Dashboard
+====================================================== */
 
+router.get(
+  "/:doctorId/my-slots",
+  auth,
+  role("ADMIN", "DOCTOR"),
+  async (req, res) => {
+
+    try {
+
+      const { doctorId } = req.params;
+
+      /* ================= ACCESS CONTROL ================= */
+
+      if (
+        req.user.role === "DOCTOR" &&
+        req.user.doctorId !== doctorId
+      ) {
+        return res.status(403).json({
+          message: "Access denied"
+        });
+      }
+
+      /* ================= FIND DOCTOR ================= */
+
+      const doctor = await Doctor.findOne({
+        doctorId,
+        isActive: true
+      }).select("availableSlots");
+
+      if (!doctor) {
+        return res.status(404).json({
+          message: "Doctor not found"
+        });
+      }
+
+      /* ================= RETURN ALL SLOTS ================= */
+
+      const slots = doctor.availableSlots || [];
+
+      res.json(slots);
+
+    } catch (error) {
+
+      console.error(
+        "Get doctor slots error:",
+        error
+      );
+
+      res.status(500).json({
+        message: "Server Error"
+      });
+
+    }
+
+  }
+);
 /* ======================================================
    GET AVAILABLE SLOTS
 ====================================================== */

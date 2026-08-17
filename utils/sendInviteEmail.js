@@ -1,28 +1,75 @@
-const { Resend } = require("resend");
+const { google } = require("googleapis");
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET
+);
 
-const sendInviteEmail = async (doctorEmail, inviteToken) => {
-  const frontendUrl =
-    process.env.FRONTEND_URL || "http://localhost:3000";
+oauth2Client.setCredentials({
+  refresh_token: process.env.GOOGLE_REFRESH_TOKEN
+});
 
-  const setupUrl = `${frontendUrl}/doctor-setup/${inviteToken}`;
+const gmail = google.gmail({
+  version: "v1",
+  auth: oauth2Client
+});
 
-  const { data, error } = await resend.emails.send({
-    from: "ClinicFlow <onboarding@resend.dev>",
-    to: [doctorEmail],
-    subject: "ClinicFlow - Complete Your Doctor Account Setup",
+/* ======================================================
+   CREATE RAW EMAIL
+====================================================== */
 
-    html: `
+const createRawEmail = ({
+  to,
+  subject,
+  html
+}) => {
+  const message = [
+    `From: ClinicFlow <${process.env.GMAIL_USER}>`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/html; charset=UTF-8",
+    "",
+    html
+  ].join("\r\n");
+
+  return Buffer
+    .from(message)
+    .toString("base64url");
+};
+
+/* ======================================================
+   SEND DOCTOR INVITATION
+====================================================== */
+
+const sendInviteEmail = async (
+  doctorEmail,
+  inviteToken
+) => {
+
+  try {
+
+    const frontendUrl =
+      process.env.FRONTEND_URL ||
+      "http://localhost:3000";
+
+    const setupUrl =
+      `${frontendUrl}/doctor-setup/${inviteToken}`;
+
+    const html = `
       <div style="
         font-family: Arial, sans-serif;
         max-width: 600px;
         margin: auto;
         padding: 30px;
         line-height: 1.6;
+        color: #333;
       ">
 
-        <h2 style="color: #2563eb;">
+        <h2 style="
+          color: #2563eb;
+          margin-bottom: 20px;
+        ">
           Welcome to ClinicFlow
         </h2>
 
@@ -34,11 +81,12 @@ const sendInviteEmail = async (doctorEmail, inviteToken) => {
         </p>
 
         <p>
-          Please click the button below to create your password
-          and complete your account setup.
+          Please click the button below to create your
+          password and complete your account setup.
         </p>
 
         <div style="margin: 30px 0;">
+
           <a
             href="${setupUrl}"
             style="
@@ -53,46 +101,98 @@ const sendInviteEmail = async (doctorEmail, inviteToken) => {
           >
             Complete Account Setup
           </a>
+
         </div>
 
         <p>
-          If the button doesn't work, copy and paste this URL
-          into your browser:
+          If the button doesn't work, copy and paste
+          the following URL into your browser:
         </p>
 
         <p>
-          <a href="${setupUrl}">
+          <a
+            href="${setupUrl}"
+            style="color: #2563eb;"
+          >
             ${setupUrl}
           </a>
         </p>
 
         <p>
-          This invitation link is valid for 24 hours.
+          This invitation link is valid for
+          <strong>24 hours</strong>.
         </p>
 
         <hr style="margin: 30px 0;" />
 
-        <p style="color: #666; font-size: 13px;">
+        <p style="
+          color: #666;
+          font-size: 13px;
+        ">
           This is an automated email from ClinicFlow.
           Please do not reply to this email.
         </p>
 
-        <p style="color: #666; font-size: 13px;">
+        <p style="
+          color: #666;
+          font-size: 13px;
+        ">
           © ClinicFlow
         </p>
 
       </div>
-    `
-  });
+    `;
 
-  if (error) {
-    console.error("❌ Resend email failed:", error);
-    throw new Error(error.message);
+    /* -----------------------------------------------
+       Create email
+    ------------------------------------------------ */
+
+    const raw = createRawEmail({
+      to: doctorEmail,
+      subject:
+        "ClinicFlow - Complete Your Doctor Account Setup",
+      html
+    });
+
+    /* -----------------------------------------------
+       Send through Gmail API
+    ------------------------------------------------ */
+
+    const response =
+      await gmail.users.messages.send({
+        userId: "me",
+
+        requestBody: {
+          raw
+        }
+      });
+
+    console.log(
+      `📧 Doctor invitation sent successfully to ${doctorEmail}`
+    );
+
+    console.log(
+      "📨 Gmail Message ID:",
+      response.data.id
+    );
+
+    return response.data;
+
+  } catch (error) {
+
+    console.error(
+      "❌ Gmail invitation failed:"
+    );
+
+    console.error(
+      error.response?.data ||
+      error.message
+    );
+
+    throw new Error(
+      "Failed to send doctor invitation email"
+    );
   }
-
-  console.log("✅ Email sent successfully:", data?.id);
-
-  return data;
 };
 
 module.exports = sendInviteEmail;

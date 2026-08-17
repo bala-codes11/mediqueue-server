@@ -349,5 +349,53 @@ router.put(
 
   }
 );
+/* ================= DELETE DOCTOR ================= */
+router.delete(
+  "/:doctorId",
+  auth,
+  role("ADMIN"),
+  async (req, res) => {
+
+    try {
+
+      const doctor = await Doctor.findOne({
+        doctorId: req.params.doctorId
+      });
+
+      if (!doctor) {
+        return res.status(404).json({
+          message: "Doctor not found"
+        });
+      }
+
+      /* Delete doctor's queue record */
+      await Queue.deleteMany({
+        doctorId: doctor._id
+      });
+
+      /* Delete doctor */
+      await Doctor.deleteOne({
+        _id: doctor._id
+      });
+
+      res.json({
+        message: "Doctor deleted successfully"
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Delete doctor error:",
+        error
+      );
+
+      res.status(500).json({
+        message: "Failed to delete doctor"
+      });
+
+    }
+
+  }
+);
 
 module.exports = router;

@@ -310,6 +310,11 @@ router.put(
    DOCTOR: START CONSULTATION
 ====================================================== */
 
+/* ======================================================
+   DOCTOR: START CONSULTATION
+   Consultation can start only at/after scheduled time
+====================================================== */
+
 router.put(
   "/start/:appointmentId",
   auth,
@@ -317,6 +322,8 @@ router.put(
   async (req, res) => {
 
     try {
+
+      /* ================= VALIDATE ID ================= */
 
       if (
         !mongoose.Types.ObjectId.isValid(
@@ -327,6 +334,8 @@ router.put(
           message: "Invalid appointment ID"
         });
       }
+
+      /* ================= FIND APPOINTMENT ================= */
 
       const appointment =
         await Appointment.findById(
@@ -339,9 +348,19 @@ router.put(
         });
       }
 
+      /* ================= FIND DOCTOR ================= */
+
       const doctor = await Doctor.findOne({
         doctorId: req.user.doctorId
       });
+
+      if (!doctor) {
+        return res.status(404).json({
+          message: "Doctor not found"
+        });
+      }
+
+      /* ================= DOCTOR ACCESS ================= */
 
       if (
         appointment.doctorId.toString() !==
@@ -352,6 +371,8 @@ router.put(
         });
       }
 
+      /* ================= STATUS CHECK ================= */
+
       if (appointment.status !== "CALLED") {
         return res.status(400).json({
           message:
@@ -359,31 +380,101 @@ router.put(
         });
       }
 
-      appointment.status = "IN_PROGRESS";
+      /* ================= DATE CHECK ================= */
+
+      const today =
+        new Date().toISOString().split("T")[0];
+
+      if (appointment.date !== today) {
+        return res.status(400).json({
+          message:
+            "This appointment is not scheduled for today"
+        });
+      }
+
+      /* ================= TIME CHECK ================= */
+
+      /*
+        appointment.time comes from the booked slot.
+        Example:
+        appointment.date = "2026-08-17"
+        appointment.time = "10:30"
+      */
+
+      const appointmentDateTime =
+        new Date(
+          `${appointment.date}T${appointment.time}:00`
+        );
+
+      if (
+        isNaN(
+          appointmentDateTime.getTime()
+        )
+      ) {
+        return res.status(400).json({
+          message:
+            "Invalid appointment date or time"
+        });
+      }
+
+      const now = new Date();
+
+      /* ================= PREVENT EARLY START ================= */
+
+      if (now < appointmentDateTime) {
+
+        const timeRemaining =
+          appointmentDateTime.getTime() -
+          now.getTime();
+
+        const minutesRemaining =
+          Math.ceil(
+            timeRemaining / (1000 * 60)
+          );
+
+        return res.status(400).json({
+          message:
+            `Consultation cannot start yet. Appointment starts in ${minutesRemaining} minute${minutesRemaining !== 1 ? "s" : ""}.`
+        });
+
+      }
+
+      /* ================= START CONSULTATION ================= */
+
+      appointment.status =
+        "IN_PROGRESS";
 
       await appointment.save();
+
+      /* ================= REALTIME UPDATE ================= */
 
       global.io
         .to(req.user.doctorId)
         .emit("queueUpdated");
 
+      /* ================= RESPONSE ================= */
+
       res.json({
-        message: "Consultation started"
+        message:
+          "Consultation started"
       });
 
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        "Start consultation error:",
+        error
+      );
 
       res.status(500).json({
-        message: "Internal Server Error"
+        message:
+          "Internal Server Error"
       });
 
     }
 
   }
 );
-
 
 /* ======================================================
    DOCTOR: COMPLETE CONSULTATION
